@@ -11,7 +11,7 @@ import * as path from 'path';
 import { PdfExtractorService } from './sales-comparables.service';
 import { Express } from 'express';
 
-@Controller('pdf-extractor')
+@Controller('pdf')
 export class PdfExtractorController {
   constructor(private readonly pdfExtractorService: PdfExtractorService) {}
 
@@ -39,7 +39,7 @@ export class PdfExtractorController {
   )
   async uploadPdf(@UploadedFile() file: Express.Multer.File) {
     try {
-      // Make sure uploads directory exists
+      // Check if upload directory exists
       if (!fs.existsSync('./uploads')) {
         fs.mkdirSync('./uploads');
       }

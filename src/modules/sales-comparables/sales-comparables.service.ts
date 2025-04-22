@@ -6,19 +6,17 @@ import { PDFExtract } from 'pdf.js-extract';
 export class PdfExtractorService {
   private pdfExtract = new PDFExtract();
 
+  /**
+   * Extract sales comparables and related data from a PDF file
+   * @param filePath - Path to the PDF file
+   * @returns Structured data including sales comparables, demographics, proximity, supply pipeline, and zoning data
+   */
   async extractSalesComparables(filePath: string): Promise<any> {
     try {
-      // Extract raw data from PDF
       const data = await this.pdfExtract.extract(filePath, {});
-
-      // Process the extracted content
       const salesComparables = this.processSalesComparables(data);
-
-      // Extract demographics and proximity data
       const demographicsData = this.extractDemographicsData(data);
       const proximityData = this.extractProximityData(data);
-
-      // Extract new data points
       const supplyPipelineData = this.extractSupplyPipelineData(data);
       const zoningData = this.extractZoningData(data);
 
@@ -34,6 +32,9 @@ export class PdfExtractorService {
     }
   }
 
+  /**
+   * Process extracted content for sale comparable into structured data
+   */
   private processSalesComparables(data: any): any[] {
     const salesComparables = [];
     const columns = [
@@ -49,34 +50,26 @@ export class PdfExtractorService {
       'seller',
     ];
 
-    // Process each page
     for (const page of data.pages) {
-      // Group content by rows based on y-position
       const rows = this.groupContentByRows(page.content);
 
-      // Process rows with potential multi-line entries
       let i = 0;
       while (i < rows.length) {
-        // Skip header rows and empty rows
         if (rows[i].length < 5 || !this.isDataRow(rows[i])) {
           i++;
           continue;
         }
 
         try {
-          // Check if the next row might be a continuation
           let continuationRow = null;
           if (
             i + 1 < rows.length &&
             !this.isDataRow(rows[i + 1]) &&
             rows[i + 1].length > 0
           ) {
-            // The next row isn't a data row (doesn't start with a date) and has content
-            // It might be a continuation of the current row
             continuationRow = rows[i + 1];
           }
 
-          // Extract and organize data from row, passing the potential continuation row
           const rowData = this.extractDataFromRow(
             rows[i],
             columns,
@@ -86,7 +79,6 @@ export class PdfExtractorService {
             salesComparables.push(rowData);
           }
 
-          // Skip the continuation row if we used it
           i += continuationRow ? 2 : 1;
         } catch (error) {
           console.error('Error processing row:', error);
@@ -95,7 +87,6 @@ export class PdfExtractorService {
       }
     }
 
-    // Calculate PPSF for any records where it's missing or zero
     salesComparables.forEach((item) => {
       if ((!item.ppsf || item.ppsf === 0) && item.pp > 0 && item.sf > 0) {
         item.ppsf = Math.round(item.pp / item.sf);
@@ -105,6 +96,9 @@ export class PdfExtractorService {
     return salesComparables;
   }
 
+  /**
+   * Extract demographics data including population, income, consumer base, and affluence
+   */
   private extractDemographicsData(data: any): any {
     const demographicsData = {
       population: {
@@ -124,10 +118,7 @@ export class PdfExtractorService {
       },
     };
 
-    // Combine all text from all pages for better pattern matching
     const allText = this.getAllTextContent(data);
-
-    // Extract Brooklyn population data - Using improved pattern matching
     const brooklynPopulationMatch = allText.match(
       /brooklyn houses over\s*([\d.]+)\s*million residents/i,
     );
@@ -146,7 +137,6 @@ export class PdfExtractorService {
       );
     }
 
-    // Extract household income data with more flexible pattern matching
     const householdIncomeMatch =
       allText.match(/average household income.*?[\$\s]?([\d,]+)/i) ||
       allText.match(/household income.*?approximately\s*\$?([\d,]+)/i);
@@ -171,7 +161,6 @@ export class PdfExtractorService {
       );
     }
 
-    // Extract consumer base data with more flexible pattern matching
     const spendingPowerMatch =
       allText.match(/spending power.*?\$?([\d.]+)\s*billion/i) ||
       allText.match(
@@ -192,7 +181,6 @@ export class PdfExtractorService {
         parseFloat(projectedHouseholdsMatch[1]) * 1000000;
     }
 
-    // Extract affluence data with more flexible pattern matching
     const affluenceMatch =
       allText.match(/(\d+) of the (\d+) most affluent zip codes/i) ||
       allText.match(/covers four of the five most affluent zip codes/i);
@@ -209,6 +197,9 @@ export class PdfExtractorService {
     return demographicsData;
   }
 
+  /**
+   * Extract proximity data including distances to key locations and strategic advantages
+   */
   private extractProximityData(data: any): any {
     const proximityData = {
       distances: {
@@ -223,7 +214,6 @@ export class PdfExtractorService {
       strategicAdvantages: [],
     };
 
-    // Combine all text into a simplified string
     let allText = '';
     for (const page of data.pages) {
       for (const item of page.content) {
@@ -231,8 +221,6 @@ export class PdfExtractorService {
       }
     }
 
-    // Extract specific distances from page 15
-    // Find the page that contains the distance information
     const distancePage = data.pages.find((page) => {
       const pageText = page.content
         .map((item) => item.str.toLowerCase())
@@ -245,12 +233,10 @@ export class PdfExtractorService {
     });
 
     if (distancePage) {
-      // Process the specific distance page
       const distanceText = distancePage.content
         .map((item) => item.str.toLowerCase())
         .join(' ');
 
-      // Extract distances using more direct patterns based on the PDF layout
       if (
         distanceText.includes('downtown brooklyn') &&
         distanceText.includes('4 miles')
@@ -287,7 +273,6 @@ export class PdfExtractorService {
       }
     }
 
-    // Brooklyn Battery Tunnel proximity
     if (
       allText.includes('less than five minutes from') ||
       allText.includes('five minutes from the brooklyn battery tunnel')
@@ -295,7 +280,6 @@ export class PdfExtractorService {
       proximityData.distances.brooklynBatteryTunnel = 'less than 5 minutes';
     }
 
-    // Adjacent facilities - Red Hook Container Terminal
     if (allText.includes('red hook container terminal')) {
       proximityData.adjacentFacilities.push({
         name: 'Red Hook Container Terminal',
@@ -304,7 +288,6 @@ export class PdfExtractorService {
       });
     }
 
-    // Strategic advantages - Directly extract from PDF content
     const strategicAdvantages = [
       {
         keyword: "ideally located on brooklyn's waterfront",
@@ -357,10 +340,8 @@ export class PdfExtractorService {
       supplyConstraints: [],
     };
 
-    // Combine all text from all pages for better pattern matching
     const allText = this.getAllTextContent(data);
 
-    // Extract vacancy rate data
     const vacancyRateMatch = allText.match(
       /brooklyn submarket.*?approximately (\d+)% vacancy/i,
     );
@@ -371,7 +352,6 @@ export class PdfExtractorService {
       );
     }
 
-    // Extract average taking rents
     const takingRentsMatch = allText.match(
       /borough average taking rents continue to exceed \$(\d+) PSF/i,
     );
@@ -382,7 +362,6 @@ export class PdfExtractorService {
       );
     }
 
-    // Extract absorption data
     const absorptionMatch = allText.match(
       /posted year-to-date net absorption of ([\d,]+) SF/i,
     );
@@ -391,7 +370,6 @@ export class PdfExtractorService {
         absorptionMatch[1] + ' SF year-to-date net absorption';
     }
 
-    // Extract lease volume data
     const leaseVolumeMatch = allText.match(
       /over ([\d,]+) SF of Q\d+ \d{4} leasing volume in the Boroughs/i,
     );
@@ -400,7 +378,6 @@ export class PdfExtractorService {
         leaseVolumeMatch[1] + ' SF quarterly leasing volume';
     }
 
-    // Extract supply constraints
     const supplyConstraintPatterns = [
       {
         pattern:
@@ -439,7 +416,6 @@ export class PdfExtractorService {
       }
     });
 
-    // Extract nearby developments based on context clues
     if (allText.includes('red hook container terminal')) {
       supplyPipelineData.nearbyDevelopments.push({
         name: 'Red Hook Container Terminal',
@@ -450,8 +426,6 @@ export class PdfExtractorService {
       });
     }
 
-    // Extract property type mix information
-    // Given that we're analyzing a logistics-centric document, we can infer some contextual data
     if (
       allText.includes(
         "brooklyn's logistics inventory has declined by more than 6 msf",
@@ -478,11 +452,8 @@ export class PdfExtractorService {
       municipalReferences: [],
     };
 
-    // Combine all text from all pages for better pattern matching
     const allText = this.getAllTextContent(data);
 
-    // Extract zoning codes based on mentions in the text
-    // Look for patterns indicating zoning information
     const zoningCodeMatch = allText.match(
       /amazon last-mile use is exclusively permitted in ([A-Z\d]+) zones/i,
     );
@@ -491,7 +462,6 @@ export class PdfExtractorService {
       zoningData.allowedUses.push('Amazon last-mile distribution facilities');
     }
 
-    // Extract information about recent zoning changes
     const recentZoningChanges = [
       {
         pattern: /new industrial permit, introduced in May 2024/i,
@@ -509,14 +479,12 @@ export class PdfExtractorService {
       }
     });
 
-    // Extract restrictions based on context
     if (allText.includes('special permit from the city planning commission')) {
       zoningData.restrictions.push(
         'Last-mile facilities require special permit from City Planning Commission',
       );
     }
 
-    // Add municipal references for NYC zoning
     zoningData.municipalReferences = [
       {
         name: 'NYC Department of City Planning',
@@ -536,7 +504,6 @@ export class PdfExtractorService {
   }
 
   private getAllTextContent(data: any): string {
-    // Combine all text content from all pages
     let allText = '';
     for (const page of data.pages) {
       const pageText = page.content
@@ -548,21 +515,18 @@ export class PdfExtractorService {
   }
 
   private groupContentByRows(content: any[]): any[][] {
-    // Sort content by y-position
     const sortedContent = [...content].sort((a, b) => a.y - b.y);
 
     const rows: any[][] = [];
     let currentRowY = -1;
     let currentRow: any[] = [];
-    const yThreshold = 5; // Adjust based on PDF spacing
+    const yThreshold = 5;
 
     for (const item of sortedContent) {
       if (item.str.trim() === '') continue;
 
-      // Check if we're on a new row
       if (currentRowY === -1 || Math.abs(item.y - currentRowY) > yThreshold) {
         if (currentRow.length > 0) {
-          // Sort items in the row by x-position
           currentRow.sort((a, b) => a.x - b.x);
           rows.push(currentRow);
         }
@@ -573,7 +537,6 @@ export class PdfExtractorService {
       }
     }
 
-    // Add the last row
     if (currentRow.length > 0) {
       currentRow.sort((a, b) => a.x - b.x);
       rows.push(currentRow);
@@ -583,7 +546,6 @@ export class PdfExtractorService {
   }
 
   private isDataRow(row: any[]): boolean {
-    // Check if the first cell contains a date format like "Jun-24"
     const firstCellText = row[0]?.str.trim();
     return !!firstCellText.match(/^\w{3}-\d{2}$/);
   }
@@ -593,35 +555,22 @@ export class PdfExtractorService {
     columnNames: string[],
     continuationRow?: any[],
   ): any {
-    // Extract text from row items
     const rowTexts = row.map((item) => item.str.trim());
 
-    // Initialize result object
     const mappedData: Record<string, any> = {};
 
-    // Store column positions for continuation row alignment
     const columnPositions: Record<string, number> = {};
 
-    // Special handling for common patterns in the data
-    // First, try to find the date (typically first column)
     const dateIndex = rowTexts.findIndex((text) => text.match(/^\w{3}-\d{2}$/));
     if (dateIndex !== -1) {
       mappedData['date'] = rowTexts[dateIndex];
       columnPositions['date'] = row[dateIndex].x;
-
-      // Property name is typically after date
       mappedData['propertyName'] = rowTexts[dateIndex + 1] || '';
       columnPositions['propertyName'] = row[dateIndex + 1]?.x || 0;
-
-      // Major tenant after property name
       mappedData['majorTenant'] = rowTexts[dateIndex + 2] || '';
       columnPositions['majorTenant'] = row[dateIndex + 2]?.x || 0;
-
-      // Borough/market after major tenant
       mappedData['boroughMarket'] = rowTexts[dateIndex + 3] || '';
       columnPositions['boroughMarket'] = row[dateIndex + 3]?.x || 0;
-
-      // Look for square footage (usually a large number with commas)
       const sfPattern = /^[\d,]+$/;
       const sfIndex = rowTexts.findIndex(
         (text, i) => i > dateIndex + 3 && sfPattern.test(text),
@@ -630,7 +579,6 @@ export class PdfExtractorService {
         mappedData['sf'] = parseInt(rowTexts[sfIndex].replace(/,/g, ''), 10);
         columnPositions['sf'] = row[sfIndex].x;
 
-        // Purchase price usually follows SF and contains dollar signs or is a large number
         const ppPattern = /^[$]?[\d,]+$/;
         const ppIndex = rowTexts.findIndex(
           (text, i) => i > sfIndex && ppPattern.test(text),
@@ -642,7 +590,6 @@ export class PdfExtractorService {
           );
           columnPositions['pp'] = row[ppIndex].x;
 
-          // PPSF is usually a 3-digit number that follows the purchase price
           const ppsfPattern = /^\d{2,3}$/;
           const ppsfIndex = rowTexts.findIndex(
             (text, i) => i > ppIndex && ppsfPattern.test(text),
@@ -651,22 +598,20 @@ export class PdfExtractorService {
             mappedData['ppsf'] = parseInt(rowTexts[ppsfIndex], 10);
             columnPositions['ppsf'] = row[ppsfIndex].x;
           } else {
-            // Calculate PPSF if not found but we have PP and SF
             if (mappedData['pp'] && mappedData['sf']) {
               mappedData['ppsf'] = Math.round(
                 mappedData['pp'] / mappedData['sf'],
               );
             } else {
-              mappedData['ppsf'] = 0; // Default value
+              mappedData['ppsf'] = 0;
             }
           }
 
-          // Cap rate usually follows PPSF and is a small decimal number, possibly with %
           const capRatePattern = /^[\d.]+%?$/;
           const capRateIndex = rowTexts.findIndex((text, i) => {
             if (i > (ppsfIndex !== -1 ? ppsfIndex : ppIndex)) {
               const num = parseFloat(text.replace('%', ''));
-              return capRatePattern.test(text) && num < 10; // Cap rates are typically under 10%
+              return capRatePattern.test(text) && num < 10;
             }
             return false;
           });
@@ -676,12 +621,8 @@ export class PdfExtractorService {
               rowTexts[capRateIndex].replace('%', ''),
             );
             columnPositions['capRate'] = row[capRateIndex].x;
-
-            // Purchaser typically follows cap rate
             mappedData['purchaser'] = rowTexts[capRateIndex + 1] || '';
             columnPositions['purchaser'] = row[capRateIndex + 1]?.x || 0;
-
-            // Seller is typically the last item
             mappedData['seller'] = rowTexts.slice(capRateIndex + 2).join(', ');
             if (row[capRateIndex + 2]) {
               columnPositions['seller'] = row[capRateIndex + 2].x;
@@ -691,35 +632,25 @@ export class PdfExtractorService {
       }
     }
 
-    // Process continuation row if it exists
     if (continuationRow && continuationRow.length > 0) {
-      // Define threshold for x-coordinate alignment
-      const xThreshold = 10; // Adjust based on PDF layout
+      const xThreshold = 10;
 
-      // Array to track which continuation row items have been used
       const usedContinuationItems = new Array(continuationRow.length).fill(
         false,
       );
 
-      // Check for text continuation for each column
       for (const column of columnNames) {
-        // Skip numeric columns that shouldn't have continuation text
         if (['date', 'sf', 'pp', 'ppsf', 'capRate'].includes(column)) continue;
 
-        // Only process columns that have established positions
         if (columnPositions[column]) {
-          // Find continuation text that aligns with this column
           for (let i = 0; i < continuationRow.length; i++) {
-            if (usedContinuationItems[i]) continue; // Skip already used items
+            if (usedContinuationItems[i]) continue;
 
             const item = continuationRow[i];
             if (Math.abs(item.x - columnPositions[column]) < xThreshold) {
-              // This continuation item aligns with the current column
               if (mappedData[column]) {
-                // Append to existing content
                 mappedData[column] += ' ' + item.str.trim();
               } else {
-                // Set new content
                 mappedData[column] = item.str.trim();
               }
               usedContinuationItems[i] = true;
@@ -728,16 +659,12 @@ export class PdfExtractorService {
         }
       }
 
-      // For any remaining continuation items that weren't aligned to specific columns,
-      // add them to the 'notes' field or to the closest column
       const unusedItems = continuationRow.filter(
         (_, i) => !usedContinuationItems[i],
       );
       if (unusedItems.length > 0) {
-        // Sort by x-position
         unusedItems.sort((a, b) => a.x - b.x);
 
-        // Find the closest column for each unused item
         for (const item of unusedItems) {
           let closestColumn = 'notes';
           let minDistance = Infinity;
@@ -750,18 +677,15 @@ export class PdfExtractorService {
             }
           }
 
-          // If distance is too large, put in notes instead
           if (minDistance > xThreshold * 2) {
             closestColumn = 'notes';
           }
 
-          // Add to the appropriate column
           if (closestColumn === 'notes') {
             mappedData['notes'] = mappedData['notes']
               ? mappedData['notes'] + ' ' + item.str.trim()
               : item.str.trim();
           } else if (!['sf', 'pp', 'ppsf', 'capRate'].includes(closestColumn)) {
-            // Only append to non-numeric columns
             mappedData[closestColumn] = mappedData[closestColumn]
               ? mappedData[closestColumn] + ' ' + item.str.trim()
               : item.str.trim();
@@ -770,7 +694,6 @@ export class PdfExtractorService {
       }
     }
 
-    // Fill in any missing columns with default values
     columnNames.forEach((column) => {
       if (!mappedData[column]) {
         if (['sf', 'pp', 'ppsf'].includes(column)) {
@@ -783,7 +706,6 @@ export class PdfExtractorService {
       }
     });
 
-    // Ensure PPSF is calculated if we have purchase price and square footage
     if (
       mappedData['ppsf'] === 0 &&
       mappedData['pp'] > 0 &&
