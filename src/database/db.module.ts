@@ -17,6 +17,9 @@ dotenv.config();
         password: configService.get('POSTGRES_PASSWORD'),
         autoLoadEntities: true,
         synchronize: true /** TODO: Set to false in Production */,
+        ssl: {
+          rejectUnauthorized: false, // Important for Render
+        },
       }),
       inject: [ConfigService],
     }),
