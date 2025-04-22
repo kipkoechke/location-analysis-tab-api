@@ -9,6 +9,7 @@ import * as fs from 'fs';
 import { diskStorage } from 'multer';
 import * as path from 'path';
 import { PdfExtractorService } from './sales-comparables.service';
+import { Express } from 'express';
 
 @Controller('pdf-extractor')
 export class PdfExtractorController {
